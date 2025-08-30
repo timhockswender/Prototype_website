@@ -15,12 +15,12 @@ class State(rx.State):
     active_gallery: str = ""
     is_detail_open: bool = False
     current_image_detail: ImageData = ImageData(src="", alt="", name="", price=0.0, description="")
-    cart_items = rx.var(default_factory=list)
+    cart_items: list[ImageData] = []
     is_cart_open: bool = False
 
-    # Gallery images as Vars
-    pergamano_images = rx.var(default_factory=list)
-    original_images = rx.var(default_factory=list)
+    # Gallery images
+    pergamano_images: list[ImageData] = []
+    original_images: list[ImageData] = []
 
     DB_FILE = "artshop.db"
 
@@ -56,7 +56,7 @@ class State(rx.State):
         self.is_detail_open = False
 
     def add_to_cart(self):
-        self.cart_items.set(self.cart_items.get() + [self.current_image_detail])
+        self.cart_items.append(self.current_image_detail)
         self.close_image_detail()
         self.is_cart_open = True
 
@@ -67,26 +67,24 @@ class State(rx.State):
         self.is_cart_open = False
 
     def clear_cart(self):
-        self.cart_items.set([])
+        self.cart_items.clear()
 
     def remove_from_cart(self, index: int):
-        items = self.cart_items.get()
-        if 0 <= index < len(items):
-            del items[index]
-        self.cart_items.set(items)
+        if 0 <= index < len(self.cart_items):
+            del self.cart_items[index]
 
     def checkout(self):
         print(f"Checkout for {self.cart_count} items.")
         self.close_cart()
         self.clear_cart()
 
-    @property
+    @rx.var
     def cart_count(self) -> int:
-        return len(self.cart_items.get())
+        return len(self.cart_items)
 
-    @property
+    @rx.var
     def cart_total(self) -> float:
-        return sum(item.price for item in self.cart_items.get())
+        return sum(item.price for item in self.cart_items)
 
     def load_gallery_metadata(self):
         meta = {}
@@ -133,8 +131,8 @@ class State(rx.State):
 
     def load_gallery_metadata_images(self):
         meta = self.load_gallery_metadata()
-        self.pergamano_images.set(self.build_image_list("pergamano", meta))
-        self.original_images.set(self.build_image_list("original", meta))
+        self.pergamano_images = self.build_image_list("pergamano", meta)
+        self.original_images = self.build_image_list("original", meta)
 
 
 def topic_card(topic_name, topic_data):
@@ -169,7 +167,7 @@ def render_subtopic(sub):
     
     if sub.get('type') == 'gallery':
         gallery_name = sub['name']
-        images_var = sub.get('images', rx.var(default_factory=list))
+        images_var = sub.get('images', [])
         return rx.box(
             rx.box(gallery_name, on_click=lambda: State.toggle_gallery(gallery_name), style={
                 "padding": "8px 12px", "margin": "6px 0", "cursor": "pointer"
@@ -262,7 +260,7 @@ def cart_modal():
                 rx.modal_header("Your Cart"),
                 rx.modal_body(
                     rx.cond(
-                        State.cart_items.length() > 0,
+                        State.cart_count > 0,
                         rx.unordered_list(
                             rx.foreach(
                                 State.cart_items,
@@ -326,7 +324,7 @@ def index():
         rx.text("Click a topic to expand. Click a gallery name, then click an image for details.", text_align="center", color="rgba(255,255,255,.85)", margin_top="5px"),
         rx.grid(
             rx.foreach(
-                list(TOPICS.items()),  # <-- FIXED HERE
+                list(TOPICS.items()),
                 lambda item: topic_card(item[0], item[1])
             ),
             grid_template_columns="repeat(auto-fit, minmax(220px, 1fr))",
